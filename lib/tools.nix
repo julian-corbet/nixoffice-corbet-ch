@@ -20,7 +20,7 @@
   # The renderer, not the tooling around it: what turns a source document into the artifact.
   authoring = {
     typst = { arch = "typst"; nixpkgs = "typst"; };
-    quarto = { arch = "quarto-cli-bin"; nixpkgs = "quarto"; };
+    quarto = { arch = "quarto-cli-bin"; nixpkgs = "quarto"; aur = true; };
     pandoc = { arch = "pandoc-cli"; nixpkgs = "pandoc"; };
   };
 
