@@ -19,12 +19,20 @@ let
     description = "Which ${what}. Available: ${lib.concatStringsSep ", " (lib.attrNames table)}.";
   };
 
+  # Each resolved entry carries the catalogue KEY it was selected by. Without it an entry has no
+  # identity of its own -- only its per-channel package names -- so anything reporting about a
+  # selection has to pick one of those names to report it BY, and every channel is nullable. That
+  # is how `unavailableOnNixos` came to filter on `arch != null`: it reported the pacman name, so
+  # it could only report entries that had one, and a Flatpak-only entry with no nixpkgs attribute
+  # (the exact case the option exists for) fell out of its own warning silently.
+  withName = group: table: map (k: table.${k} // { name = k; }) group;
+
   selected = lib.flatten [
-    (map (k: cat.suite.${k}) cfg.suite)
-    (map (k: cat.authoring.${k}) cfg.authoring)
-    (map (k: cat.editors.${k}) cfg.editors)
-    (map (k: cat.viewers.${k}) cfg.viewers)
-    (map (k: cat.apps.${k}) cfg.apps)
+    (withName cfg.suite cat.suite)
+    (withName cfg.authoring cat.authoring)
+    (withName cfg.editors cat.editors)
+    (withName cfg.viewers cat.viewers)
+    (withName cfg.apps cat.apps)
   ];
 in
 {
@@ -82,7 +90,11 @@ in
     unavailableOnNixos = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       readOnly = true;
-      description = "Selections with no nixpkgs equivalent, surfaced rather than silently dropped.";
+      description = ''
+        Selections with no nixpkgs equivalent, surfaced rather than silently dropped, named by
+        their catalogue key -- the one identity every selection has regardless of which delivery
+        channels it does or does not carry.
+      '';
     };
   };
 
@@ -100,9 +112,11 @@ in
         })
         (lib.filter (t: (t.flatpak or null) != null && (t.arch or null) == null) selected);
 
-    # `arch = null` means no pacman name exists -- those entries are Flatpak's, above, and must
-    # not fall through into a package list as a literal "null" or an empty string.
+    # Reported by catalogue KEY, and gated on nothing but the missing nixpkgs attribute itself.
+    # A selection with no nixpkgs equivalent is the whole population this option describes; which
+    # OTHER channels that selection happens to have says nothing about whether NixOS can install
+    # it, so nothing about them belongs in this filter.
     nixoffice.unavailableOnNixos =
-      lib.unique (map (t: t.arch) (lib.filter (t: t.arch != null && t.nixpkgs == null) selected));
+      lib.unique (map (t: t.name) (lib.filter (t: (t.nixpkgs or null) == null) selected));
   };
 }
