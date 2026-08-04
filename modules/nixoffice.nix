@@ -12,6 +12,7 @@
 let
   cfg = config.nixoffice;
   cat = import ../lib/tools.nix { };
+  resolve = import ../lib/resolve.nix { inherit lib; };
 
   mkGroup = what: table: lib.mkOption {
     type = lib.types.listOf (lib.types.enum (lib.attrNames table));
@@ -98,25 +99,14 @@ in
     };
   };
 
+  # The four resolutions are ../lib/resolve.nix's, not written out here, so ../checks/default.nix
+  # can drive them with fixture tables containing entry shapes the real catalogue does not happen
+  # to have. See that file's own header for the bug that distinction is not hypothetical about.
   config = {
     nixoffice.want = selected;
-    nixoffice.archPackages = lib.unique (map (t: t.arch) (lib.filter (t: t.arch != null && !(t.aur or false)) selected));
-    nixoffice.aurPackages = lib.unique (map (t: t.arch) (lib.filter (t: t.arch != null && (t.aur or false)) selected));
-    nixoffice.flatpakApps =
-      let flathub = { name = "flathub"; url = "https://flathub.org/repo/flathub.flatpakrepo"; };
-      in map
-        (t: {
-          id = t.flatpak;
-          remoteName = (t.flatpakRemote or null).name or flathub.name;
-          remoteUrl = (t.flatpakRemote or null).url or flathub.url;
-        })
-        (lib.filter (t: (t.flatpak or null) != null && (t.arch or null) == null) selected);
-
-    # Reported by catalogue KEY, and gated on nothing but the missing nixpkgs attribute itself.
-    # A selection with no nixpkgs equivalent is the whole population this option describes; which
-    # OTHER channels that selection happens to have says nothing about whether NixOS can install
-    # it, so nothing about them belongs in this filter.
-    nixoffice.unavailableOnNixos =
-      lib.unique (map (t: t.name) (lib.filter (t: (t.nixpkgs or null) == null) selected));
+    nixoffice.archPackages = resolve.archPackages selected;
+    nixoffice.aurPackages = resolve.aurPackages selected;
+    nixoffice.flatpakApps = resolve.flatpakApps selected;
+    nixoffice.unavailableOnNixos = resolve.unavailableOnNixos selected;
   };
 }
