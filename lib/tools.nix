@@ -68,4 +68,17 @@
     papers = { arch = "papers"; nixpkgs = "papers"; };
     xournalpp = { arch = "xournalpp"; nixpkgs = "xournalpp"; };
   };
+
+  # ── Applications that are documents-adjacent but not documents ──────────────────────────────
+  #
+  # This group exists because nothing else owns an ordinary desktop application. A trip planner
+  # is not a document by this file's own test -- it renders nothing you read later -- and it is
+  # filed here by decision rather than by rule, which is worth saying plainly so the test above
+  # is not quietly widened to fit it. If a general desktop-application domain ever appears, this
+  # group is what moves.
+  apps = {
+    # Flatpak-only: not in any Arch repo, and the project renamed itself from Railway to DieBahn,
+    # so the id and the name disagree with each other in the obvious search.
+    diebahn = { arch = null; nixpkgs = "diebahn"; flatpak = "de.schmidhuberj.DieBahn"; };
+  };
 }

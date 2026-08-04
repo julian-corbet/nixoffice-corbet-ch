@@ -24,6 +24,7 @@ let
     (map (k: cat.authoring.${k}) cfg.authoring)
     (map (k: cat.editors.${k}) cfg.editors)
     (map (k: cat.viewers.${k}) cfg.viewers)
+    (map (k: cat.apps.${k}) cfg.apps)
   ];
 in
 {
@@ -32,6 +33,7 @@ in
     authoring = mkGroup "authoring and typesetting tools" cat.authoring;
     editors = mkGroup "prose editors" cat.editors;
     viewers = mkGroup "document viewers" cat.viewers;
+    apps = mkGroup "documents-adjacent applications" cat.apps;
 
     want = lib.mkOption {
       type = lib.types.listOf lib.types.attrs;
@@ -61,6 +63,22 @@ in
       '';
     };
 
+    flatpakApps = lib.mkOption {
+      type = lib.types.listOf lib.types.attrs;
+      readOnly = true;
+      description = ''
+        Selections whose only delivery is Flatpak, as `{ id; remoteName; remoteUrl; }`.
+
+        Id and remote travel TOGETHER rather than as two lists, because "the remote" is not
+        always Flathub and a bare id cannot say where it came from -- a consumer that assumes
+        Flathub installs the wrong app or fails outright. A caller wanting only ids:
+        `map (a: a.id) config.nixoffice.flatpakApps`.
+
+        Nothing here installs them: Flatpak is neither pacman nor nixpkgs, so the host wires
+        these to whatever runs `flatpak install`.
+      '';
+    };
+
     unavailableOnNixos = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       readOnly = true;
@@ -70,9 +88,21 @@ in
 
   config = {
     nixoffice.want = selected;
-    nixoffice.archPackages = lib.unique (map (t: t.arch) (lib.filter (t: !(t.aur or false)) selected));
-    nixoffice.aurPackages = lib.unique (map (t: t.arch) (lib.filter (t: t.aur or false) selected));
+    nixoffice.archPackages = lib.unique (map (t: t.arch) (lib.filter (t: t.arch != null && !(t.aur or false)) selected));
+    nixoffice.aurPackages = lib.unique (map (t: t.arch) (lib.filter (t: t.arch != null && (t.aur or false)) selected));
+    nixoffice.flatpakApps =
+      let flathub = { name = "flathub"; url = "https://flathub.org/repo/flathub.flatpakrepo"; };
+      in map
+        (t: {
+          id = t.flatpak;
+          remoteName = (t.flatpakRemote or null).name or flathub.name;
+          remoteUrl = (t.flatpakRemote or null).url or flathub.url;
+        })
+        (lib.filter (t: (t.flatpak or null) != null && (t.arch or null) == null) selected);
+
+    # `arch = null` means no pacman name exists -- those entries are Flatpak's, above, and must
+    # not fall through into a package list as a literal "null" or an empty string.
     nixoffice.unavailableOnNixos =
-      lib.unique (map (t: t.arch) (lib.filter (t: t.nixpkgs == null) selected));
+      lib.unique (map (t: t.arch) (lib.filter (t: t.arch != null && t.nixpkgs == null) selected));
   };
 }
