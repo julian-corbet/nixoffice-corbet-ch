@@ -43,7 +43,11 @@
   # Distinct from a code editor on purpose: these are for writing English, and the person who
   # wants one usually does not want the other.
   editors = {
-    ghostwriter = { arch = "ghostwriter"; nixpkgs = "ghostwriter"; };
+    # `nixpkgs` is the kdePackages attribute, NOT the bare name: the top-level `ghostwriter` alias
+    # was removed with KDE Gear 5 / Plasma 5's end of life and now THROWS when forced. A throwing
+    # alias is still an attribute, so `hasAttrByPath` passes it -- only forcing the derivation
+    # catches it. Same trap, same fix as `kdenlive` -> `kdePackages.kdenlive`.
+    ghostwriter = { arch = "ghostwriter"; nixpkgs = "kdePackages.ghostwriter"; };
     retext = { arch = "retext"; nixpkgs = "retext"; };
 
     # Obsidian is a prose editor by use even though it is a knowledge base by design: it edits
