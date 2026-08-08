@@ -159,9 +159,9 @@ let
   connectionsOf = x: x.w.connections;
 
   # Total on purpose: an unknown role, or an engine the software does not speak, is REFUSED by an
-  # assertion below -- and an assertion's message is forced whether or not it holds, so a helper
-  # that threw on the broken input would take the evaluation down before the refusal could report
-  # anything.
+  # assertion below -- and the messages that ever get formatted are exactly the FAILING ones, so a
+  # helper that threw on the broken input would throw precisely when the refusal is trying to
+  # report it, taking the evaluation down before it could say anything.
   wiringOf = x: role:
     let need = x.entry.needs.${role} or null; in
     if need == null then null
@@ -421,9 +421,16 @@ let
   ## ---------------------------------------------------------------------
   ## Assertions
   ##
-  ## Every message is a TOTAL function of the declaration: an assertion's message is forced whether
-  ## or not the assertion holds, so a message that only works in the failing case takes the whole
-  ## evaluation down instead of reporting anything.
+  ## The module system filters the assertions down to the FAILING ones and only then formats their
+  ## messages. A passing assertion's message is never evaluated at all, and two things follow.
+  ##
+  ## Every message here is a TOTAL function of the declaration, because a message that throws on a
+  ## partial declaration throws at exactly the moment its own assertion has failed -- the one moment
+  ## it was written for -- and takes the evaluation down instead of reporting anything.
+  ##
+  ## And a value mentioned ONLY in a message is never forced, so its type is never checked either.
+  ## Whatever an assertion wants checked has to be in its `assertion` expression. See nixwatch's
+  ## study `an-option-nothing-renders-is-never-checked`.
   ## ---------------------------------------------------------------------
 
   connectionAssertions = lib.concatMap
