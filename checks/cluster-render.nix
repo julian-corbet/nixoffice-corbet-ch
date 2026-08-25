@@ -223,7 +223,7 @@ pkgs.runCommand "nixoffice-cluster-render"
     "$(y '.spec.template.spec.containers[0].livenessProbe' $PAGES_D)"
 
   echo
-  echo "== TWO AUDIENCES, ONE POD, ONE SERVICE -- which is why `public` on it is refused =="
+  echo "== TWO AUDIENCES, ONE POD, ONE SERVICE -- which is why public exposure is refused =="
   check "the editing port"     "3000" "$(y '.spec.ports[] | select(.name == "admin") | .port' $PROFILE_S)"
   check "the published port"   "3001" "$(y '.spec.ports[] | select(.name == "public") | .port' $PROFILE_S)"
   check "one selector reaches both"  "profile" "$(y '.spec.selector."app.kubernetes.io/name"' $PROFILE_S)"

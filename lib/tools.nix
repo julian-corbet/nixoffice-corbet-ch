@@ -61,15 +61,18 @@
   #
   # A reader and an annotator, deliberately two tools rather than one. The single-binary answer
   # here is okular, which does both plus forms and signatures -- and pulls 42 KDE/Qt6 packages
-  # onto a desktop that has just finished removing KDE. papers is Evince's GTK4 successor and
-  # xournalpp is the stylus/markup half; together they cover reading and annotating without
-  # reintroducing a framework stack for two features.
+  # onto a desktop that has just finished removing KDE. Zathura is the reading half: its glib file
+  # monitor reloads a PDF when a typesetter replaces it, which makes it the viewer for a watched
+  # Typst build rather than merely another way to open a finished file. Xournal++ is the
+  # stylus/markup half.
   #
-  # zathura and evince were here and are not any more: zathura's keyboard-driven minimalism reads
-  # as a TUI but it is a GTK application, and neither was ever installed on a consuming host --
-  # a catalogue entry nobody selects is a claim this table cannot back.
+  # Arch splits the shell from its document backends, and the shell alone cannot open a PDF. Name
+  # the MuPDF backend as the package: it depends on the shell and therefore resolves one catalogue
+  # selection to a working PDF viewer. Nixpkgs' top-level `zathura` is already the corresponding
+  # wrapper with its plugins, so its channel needs no second entry.
   viewers = {
     papers = { arch = "papers"; nixpkgs = "papers"; };
+    zathura = { arch = "zathura-pdf-mupdf"; nixpkgs = "zathura"; };
     xournalpp = { arch = "xournalpp"; nixpkgs = "xournalpp"; };
   };
 

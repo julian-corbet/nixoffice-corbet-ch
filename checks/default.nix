@@ -58,7 +58,7 @@ let
       suite = [ "onlyoffice" ];
       authoring = [ "typst" "quarto" "pandoc" ];
       editors = [ "ghostwriter" "retext" "obsidian" ];
-      viewers = [ "papers" "xournalpp" ];
+      viewers = [ "papers" "zathura" "xournalpp" ];
       apps = [ "diebahn" ];
     };
   };
@@ -148,6 +148,14 @@ let
     (check "module/selection-keys-are-not-package-names"
       (builtins.elem "onlyoffice-bin" live.nixoffice.archPackages
         && !(builtins.elem "onlyoffice" live.nixoffice.archPackages))
+      "got: ${builtins.toJSON live.nixoffice.archPackages}")
+
+    # The Arch `zathura` package is only the viewer shell. Selecting the catalogue's PDF reader
+    # must resolve to its MuPDF backend, which depends on and brings in that shell, rather than
+    # producing an installed application that cannot open the document it was selected to read.
+    (check "module/zathura-resolves-to-a-working-arch-pdf-viewer"
+      (builtins.elem "zathura-pdf-mupdf" live.nixoffice.archPackages
+        && !(builtins.elem "zathura" live.nixoffice.archPackages))
       "got: ${builtins.toJSON live.nixoffice.archPackages}")
 
     (check "module/every-live-selection-has-a-nixpkgs-name"
