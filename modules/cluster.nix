@@ -53,8 +53,9 @@
 #      value somebody wrote down; it is never what happens when nobody wrote anything.
 #   4. THE ADDRESS IS DERIVED WHERE THE SOFTWARE LETS IT BE. A declaration names a Service and a
 #      namespace, never a host: this module builds the in-cluster name from them and the cluster
-#      domain. Where the software takes one connection string instead, the address is inside a
-#      Secret and the derivation is not available -- which is stated rather than papered over.
+#      domain. Where software takes one connection string, an opaque or credential-bearing value
+#      stays in a Secret; a credential-free Service URL may be derived only for a scheme the engine
+#      catalogue explicitly permits.
 #   5. AN EMBEDDED ENGINE'S DIRECTORY MUST BE BACKED WHEN IT IS CHOSEN, AND MUST NOT BE WHEN IT IS
 #      NOT. A backing for a database file that will never be written reads, to everybody who comes
 #      after, as though the data were in there.
@@ -100,6 +101,9 @@ let
 
   catalogue = import ../lib/applications.nix { };
   engineKinds = catalogue.engines;
+  serviceDsnSchemes = lib.unique (lib.concatMap
+    (engine: engine.serviceDsnSchemes or [ ])
+    (lib.attrValues engineKinds));
 
   # The common factory uses `selfUrlEnv` as the catalogue-side marker for whether a public URL is
   # required. Nixoffice has the richer source fact below (`publicUrl.envs`, including host/origin
@@ -193,6 +197,9 @@ let
   addressOf = conn:
     "${toString conn.service}.${toString conn.namespace}.svc.${platform.clusterDomain}";
 
+  serviceDsnOf = x: dsn:
+    "${dsn.scheme}://${dsn.service}.${namespaceOf x}.svc.${platform.clusterDomain}:${toString dsn.port}";
+
   portOf = conn:
     if conn.port != null then conn.port else engineKinds.${conn.engine}.port;
 
@@ -220,7 +227,10 @@ let
       // lib.optionalAttrs (w.env != null) {
         ${w.env} = w.prefix + x.entry.state.${w.state}.mountPath + "/" + w.file;
       }
-    # `dsn`: the whole connection is one string and it arrives by reference, never as a value.
+    # `dsn`: an opaque or credential-bearing string arrives by Secret reference. The one safe plain
+    # form is assembled from typed pieces below: no userinfo, host, path or query can enter it.
+    else if w.style == "dsn" && conn.serviceDsn != null then
+      typed // { ${w.env} = serviceDsnOf x conn.serviceDsn; }
     else typed;
 
   connectionSecrets = x: role:
@@ -476,17 +486,24 @@ let
             ++ lib.optional (conn.database != null) "database"
             ++ lib.optional (conn.user != null) "user"
             ++ lib.optional (conn.password != null) "password"
-            ++ lib.optional (conn.dsn != null) "dsn";
+            ++ lib.optional (conn.dsn != null) "dsn"
+            ++ lib.optional (conn.serviceDsn != null) "serviceDsn";
             fieldOnly = [ "service" "namespace" "port" "database" "user" "password" ];
+            dsnSources = lib.optional (conn.dsn != null) "dsn"
+            ++ lib.optional (conn.serviceDsn != null) "serviceDsn";
           in
           [
             {
               assertion = style != "fields"
-              || (conn.service != null && conn.namespace != null && conn.dsn == null);
+              || (conn.service != null
+                && conn.namespace != null
+                && conn.dsn == null
+                && conn.serviceDsn == null);
               message =
                 "nixoffice: `${x.name}`'s `${role}` connection takes its address as separate "
                 + "variables, so it needs a `service` and a `namespace` and must not be given a "
-                + "`dsn`. It sets " + (if set == [ ] then "nothing at all" else listNames set)
+                + "`dsn` or `serviceDsn`. It sets "
+                + (if set == [ ] then "nothing at all" else listNames set)
                 + ". The point of naming a Service rather than a host is that the address is "
                 + "DERIVED here -- from the name, the namespace and the cluster domain -- so a "
                 + "cross-namespace address is never written by hand.";
@@ -508,13 +525,14 @@ let
                 + "everything this module renders is committed to git.";
             }
             {
-              assertion = style != "dsn" || conn.dsn != null;
+              assertion = style != "dsn" || lib.length dsnSources == 1;
               message =
-                "nixoffice: `${x.name}`'s `${role}` connection is a single connection STRING, and "
-                + "no `dsn` names the Secret holding it. This software takes one value carrying the "
-                + "whole connection, so unlike the field-style connections here the address cannot "
-                + "be derived from a Service name -- it lives inside the credential, and it is a "
-                + "credential even when it happens to carry no password.";
+                "nixoffice: `${x.name}`'s `${role}` connection is a single connection STRING and "
+                + "must choose exactly one source: `dsn` names the Secret holding an opaque or "
+                + "credential-bearing value; `serviceDsn` derives a credential-free URL from a "
+                + "typed scheme, Service name, port, this workload's namespace and the cluster "
+                + "domain. It sets "
+                + (if dsnSources == [ ] then "neither" else listNames dsnSources) + ".";
             }
             {
               assertion = style != "dsn" || lib.intersectLists set fieldOnly == [ ];
@@ -523,6 +541,28 @@ let
                 + "also sets " + listNames (lib.intersectLists set fieldOnly) + ". Those would be a "
                 + "second copy of what is inside the string, and the string is the half the software "
                 + "actually reads -- so the two would drift apart with nothing to notice.";
+            }
+            {
+              assertion = conn.serviceDsn == null || isBareName conn.serviceDsn.service;
+              message =
+                "nixoffice: `${x.name}`'s `${role}` service-derived connection gives "
+                + "`service = \"${if conn.serviceDsn == null then "" else conn.serviceDsn.service}\"`, "
+                + "which is not a bare name. It is the NAME of a Service in this workload's category "
+                + "namespace: no dots, scheme, port, path or userinfo. The namespace and cluster "
+                + "domain come from the platform, and this module joins them.";
+            }
+            {
+              assertion = style != "dsn"
+              || conn.serviceDsn == null
+              || lib.elem conn.serviceDsn.scheme
+                (engineKinds.${conn.engine}.serviceDsnSchemes or [ ]);
+              message =
+                "nixoffice: `${x.name}`'s `${role}` connection asks to derive a `${conn.engine}` "
+                + "connection with scheme `"
+                + (if conn.serviceDsn == null then "" else conn.serviceDsn.scheme)
+                + "`, but that engine permits "
+                + listNames (engineKinds.${conn.engine}.serviceDsnSchemes or [ ])
+                + ". A scheme is protocol knowledge, not an arbitrary URL prefix.";
             }
             {
               assertion = style != "file" || set == [ ];
@@ -827,6 +867,37 @@ let
     };
   };
 
+  serviceDsnType = lib.types.submodule {
+    options = {
+      service = lib.mkOption {
+        type = lib.types.str;
+        example = "example-broker";
+        description = ''
+          NAME of a Service in this workload's category namespace. A name, never a host or URL: the
+          namespace and cluster domain are platform facts and are appended by this module.
+        '';
+      };
+
+      scheme = lib.mkOption {
+        type = lib.types.enum serviceDsnSchemes;
+        example = "redis";
+        description = ''
+          Connection scheme to place before the derived Service address. The engine catalogue
+          further restricts which of these schemes each engine supports.
+        '';
+      };
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        example = 6379;
+        description = ''
+          Port to append to the derived Service address. Required rather than inferred so changing
+          an engine kind's conventional port cannot silently move an existing connection.
+        '';
+      };
+    };
+  };
+
   connectionType = lib.types.submodule {
     options = {
       engine = lib.mkOption {
@@ -907,10 +978,22 @@ let
           The Secret and key holding a WHOLE CONNECTION STRING, for software that takes one value
           rather than separate variables.
 
-          It is a credential even when the string carries no password, and that is deliberate: this
-          module never lets a connection be a plain value. The cost is real and worth stating -- the
-          ADDRESS is then inside the Secret too, so the derivation the field-style connections get
-          is not available here, and nothing can check where the string points.
+          This remains the source for every opaque or credential-bearing string. The ADDRESS is
+          inside the Secret too, so nothing can check where it points. For the narrower case of a
+          credential-free in-cluster Service URL, see `serviceDsn`.
+        '';
+      };
+
+      serviceDsn = lib.mkOption {
+        type = lib.types.nullOr serviceDsnType;
+        default = null;
+        description = ''
+          A credential-free whole connection string derived from a typed scheme, a bare Service
+          name and a port. The Service is resolved in this workload's category namespace and under
+          `nixoffice.cluster.platform.clusterDomain`; no host, path, query or userinfo is accepted.
+
+          Available only where the selected engine's catalogue entry explicitly permits the
+          scheme. Mutually exclusive with `dsn`, whose existing Secret-backed behavior is unchanged.
         '';
       };
     };

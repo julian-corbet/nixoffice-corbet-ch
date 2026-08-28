@@ -26,15 +26,17 @@ different operational consequence:
 | | how the software takes it | what that costs |
 |---|---|---|
 | **fields** | host, port, database and user as separate variables; only the password is secret | the address can be **derived** from a Service name and a namespace, so nobody writes a cross-namespace address by hand |
-| **dsn** | one connection string | the address lives **inside a credential**. The derivation is not available, and nothing can check where the string points |
+| **dsn** | one connection string | opaque or credential-bearing strings stay in Secrets; a credential-free in-cluster Service URL can be **derived** only from a catalogue-approved scheme and typed address pieces |
 | **file** | a path inside one of its own directories | there is no address, no user and no password — and the directory holding it becomes load-bearing |
 
-The `dsn` row is the interesting one, and it is a real loss rather than a stylistic preference. Five
-of the connections here are that shape and there is nothing to be done about it: the software reads
-one value. What the module does instead is refuse to let that value be anything but a Secret
-reference — **even when the string carries no password** — because a plain connection string is a
-fleet address in a field that is committed to git, and because the moment one of them acquires a
-password nobody would go back and move it.
+The `dsn` row is the interesting one. Five connections here have that shape because their software
+reads one value. Four are opaque database strings that may carry credentials, so the module refuses
+to let them be anything but Secret references. One is a passwordless Redis broker in the same
+namespace as its application. For that narrower shape, hiding the address in a Secret loses useful
+validation without protecting anything: `serviceDsn` takes a catalogue-approved scheme, a bare
+Service name and a port, then derives the namespace and cluster domain from the platform. It cannot
+carry userinfo, a raw host, a path or a query. If that connection ever acquires a credential, it must
+move to the unchanged Secret-backed `dsn` form.
 
 ## What is structural, and what is merely checked
 

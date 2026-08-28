@@ -46,6 +46,26 @@ nixoffice.cluster.wikis.example-wiki = {
 };
 ```
 
+Software that reads one whole connection string still uses a Secret reference when that string is
+opaque or contains credentials. A credential-free in-cluster Service URL can instead be assembled
+from typed pieces when the engine catalogue explicitly permits its scheme:
+
+```nix
+connections.broker = {
+  engine = "redis";
+  serviceDsn = {
+    scheme = "redis";
+    service = "example-broker";
+    port = 6379;
+  };
+};
+```
+
+That renders `redis://example-broker.<category-namespace>.svc.<cluster-domain>:6379`. The namespace
+and cluster domain are platform facts, the Service must be a bare name, and no raw host, path, query
+or userinfo is accepted. The existing `dsn = { secret; key; };` form remains the only form for a
+credential-bearing or otherwise opaque connection string.
+
 **A required connection is defaultless, and its absence fails evaluation** — naming the role, and
 explaining that this particular software would otherwise make a database inside its own container
 rather than refusing to start. Choosing an embedded engine is something somebody writes down:

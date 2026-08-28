@@ -58,6 +58,17 @@ let
 
   goodCfg = (mkEnv good).config;
 
+  # The new service-derived source is additive. This second control keeps the original Secret-backed
+  # DSN form live and proves that it still projects through the same connection secret.
+  secretBrokerValues = {
+    imports = [ good ];
+    nixoffice.cluster.filings.pipeline.connections.broker = lib.mkForce {
+      engine = "redis";
+      dsn = { secret = "example-filing-broker"; key = "url"; };
+    };
+  };
+  secretBrokerCfg = (mkEnv secretBrokerValues).config;
+
   ## ---------------------------------------------------------------------
   ## The failing direction: guards
   ## ---------------------------------------------------------------------
@@ -99,6 +110,25 @@ let
 
     connection-string-naming-no-secret =
       lib.recursiveUpdate good { nixoffice.cluster.trackers.board.connections.database.dsn = null; };
+
+    connection-string-given-both-secret-and-service-sources =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.filings.pipeline.connections.broker.dsn = {
+          secret = "example-filing-broker";
+          key = "url";
+        };
+      };
+
+    service-derived-connection-given-an-address-instead-of-a-service-name =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.filings.pipeline.connections.broker.serviceDsn.service =
+          "example-broker.example-filing.svc";
+      };
+
+    service-derived-connection-given-an-unsupported-scheme =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.filings.pipeline.connections.broker.serviceDsn.scheme = "http";
+      };
 
     # The fields would be a second copy of what is inside the string, and the string is the half the
     # software reads.
@@ -450,6 +480,19 @@ let
       goodCfg.nixk3s.apps.board.secrets."connection-database".secret == "example-board-db"
       && goodCfg.nixk3s.apps.board.secrets."connection-database".env.DATABASE_URL == "url"
       && !(goodCfg.nixk3s.apps.board.env ? DATABASE_URL);
+
+    "a credential-free connection string is derived entirely from typed Service and platform facts" =
+      goodCfg.nixk3s.apps.pipeline.env.PAPERLESS_REDIS
+        == "redis://example-broker.example-filing.svc.cluster.local:6379"
+      && !(goodCfg.nixk3s.apps.pipeline.secrets ? "connection-broker");
+
+    "the original Secret-backed DSN schema and projection remain compatible" =
+      renders secretBrokerValues
+      && secretBrokerCfg.nixk3s.apps.pipeline.secrets."connection-broker".secret
+        == "example-filing-broker"
+      && secretBrokerCfg.nixk3s.apps.pipeline.secrets."connection-broker".env.PAPERLESS_REDIS
+        == "url"
+      && !(secretBrokerCfg.nixk3s.apps.pipeline.env ? PAPERLESS_REDIS);
 
     "a field connection's password is a reference too, and nothing else about it is" =
       goodCfg.nixk3s.apps.pages.secrets."connection-database".env.DB_PASSWORD == "password"

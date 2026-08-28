@@ -112,10 +112,16 @@
         user = "example_filing";
         password = { secret = "example-filing-db"; key = "password"; };
       };
-      # A SECOND ENGINE, of a different family, taken as one connection string.
+      # A SECOND ENGINE, of a different family, taken as one connection string. This URL contains
+      # no credential, so its host is derived from a bare Service name and platform facts instead
+      # of being hidden, unchecked, in a Secret.
       broker = {
         engine = "redis";
-        dsn = { secret = "example-filing-broker"; key = "url"; };
+        serviceDsn = {
+          scheme = "redis";
+          service = "example-broker";
+          port = 6379;
+        };
       };
     };
     credentials.secretKey = { secret = "example-filing"; key = "secretKey"; };

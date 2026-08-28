@@ -9,9 +9,10 @@
 # one directory; the fourth is a document that never opens.
 #
 # TWO OF THE ASSERTIONS IN THIS FILE ARE ABSENCES, checked on the bytes rather than on the model: no
-# engine of any kind is rendered anywhere in this tree, and no connection value -- no host, no
-# password, no connection string -- appears as anything but a Secret reference. A claim about a
-# boundary is worth exactly as much as the test that reads the output and finds nothing there.
+# engine of any kind is rendered anywhere in this tree, and no CREDENTIAL appears as a plain value.
+# Field-style addresses and credential-free Service DSNs are values because this module derives
+# them from typed pieces; passwords and opaque connection strings remain Secret references. A claim
+# about a boundary is worth exactly as much as the test that reads the output and finds nothing there.
 { pkgs, lib, env }:
 
 pkgs.runCommand "nixoffice-cluster-render"
@@ -102,6 +103,11 @@ pkgs.runCommand "nixoffice-cluster-render"
   check "a whole connection string is a reference too, in the variable the software names" \
     "example-board-db" \
     "$(y '.spec.template.spec.containers[0].env[] | select(.name == "DATABASE_URL") | .valueFrom.secretKeyRef.name' $BOARD_D)"
+  check "a credential-free broker URL is derived from scheme, Service, namespace, domain and port" \
+    "redis://example-broker.example-filing.svc.cluster.local:6379" \
+    "$(y '.spec.template.spec.containers[0].env[] | select(.name == "PAPERLESS_REDIS") | .value' $PIPE_D)"
+  check "the derived broker URL carries no credential reference" "null" \
+    "$(y '.spec.template.spec.containers[0].env[] | select(.name == "PAPERLESS_REDIS") | .valueFrom' $PIPE_D)"
   check "the driver token is the catalogue's, and it is not the engine's own name" "pg" \
     "$(y '.spec.template.spec.containers[0].env[] | select(.name == "DB_CLIENT") | .value' $CONTACTS_D)"
   # The one that ships a database server in its image: a non-local host is the only thing that
@@ -284,7 +290,7 @@ pkgs.runCommand "nixoffice-cluster-render"
   echo "  ok   only Deployments, Services, Namespaces and Applications exist"
 
   echo
-  echo "== NO SECRET OBJECT IS EVER RENDERED, AND NO CONNECTION IS EVER A VALUE =="
+  echo "== NO SECRET OBJECT IS EVER RENDERED, AND NO CREDENTIAL IS EVER A VALUE =="
   for f in $(find -L $manifests -type f | sort); do
     if [ "$(y '.kind' $f)" = "Secret" ]; then
       echo "  FAIL a Secret object was rendered: $f"; fail=1

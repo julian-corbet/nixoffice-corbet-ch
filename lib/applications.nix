@@ -76,11 +76,10 @@
 #   `fields`  host, port, database and user arrive as separate variables, so ../modules/cluster.nix
 #             DERIVES the address from the Service name and namespace the declaration gives it, and
 #             nobody writes a cross-namespace address by hand. Only the password is a credential.
-#   `dsn`     the software takes ONE connection string. The address then lives INSIDE a credential,
-#             so the derivation above is not available for it -- which is a real loss and is stated
-#             here rather than papered over. Every `dsn` connection is a Secret reference, even when
-#             the string happens to carry no password, because this module never lets a connection
-#             be a plain value.
+#   `dsn`     the software takes ONE connection string. An opaque or credential-bearing value stays
+#             inside a Secret. Where an engine explicitly publishes safe Service-URL schemes, a
+#             credential-free string may instead be derived from a typed scheme, bare Service name,
+#             port, category namespace and cluster domain -- never from an arbitrary raw URL.
 #   `file`    the engine is EMBEDDED: a file inside one of this software's own state directories.
 #             No address, no user, no password -- and a hard requirement that the directory holding
 #             it is backed, because the failure otherwise is the whole database.
@@ -192,7 +191,12 @@ rec {
     mariadb = { family = "sql"; port = 3306; embedded = false; };
     sqlite = { family = "sql"; port = null; embedded = true; };
     mongodb = { family = "documentdb"; port = 27017; embedded = false; };
-    redis = { family = "keyvalue"; port = 6379; embedded = false; };
+    redis = {
+      family = "keyvalue";
+      port = 6379;
+      embedded = false;
+      serviceDsnSchemes = [ "redis" "rediss" ];
+    };
   };
 
   # ── Wikis: pages you author and link ────────────────────────────────────────────────────────
