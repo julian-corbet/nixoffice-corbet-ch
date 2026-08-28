@@ -1,0 +1,28 @@
+name: lock metadata
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nixk3s:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Update nixk3s lock metadata
+        run: |
+          nix flake lock --update-input nixk3s
+          jq '.nodes.nixk3s.locked' flake.lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nixk3s-flake-lock
+          path: flake.lock
+          if-no-files-found: error
+          retention-days: 1
