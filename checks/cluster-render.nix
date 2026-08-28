@@ -55,6 +55,7 @@ pkgs.runCommand "nixoffice-cluster-render"
   SHELF_D=$manifests/shelf/Deployment-shelf.yaml
   TASKS_D=$manifests/tasks/Deployment-tasks.yaml
   BOARD_D=$manifests/board/Deployment-board.yaml
+  PROJECTS_D=$manifests/projects/Deployment-projects.yaml
   BOOK_D=$manifests/booking/Deployment-booking.yaml
   EDIT_D=$manifests/editing/Deployment-editing.yaml
   SUITE_D=$manifests/editingsuite/Deployment-editingsuite.yaml
@@ -144,6 +145,15 @@ pkgs.runCommand "nixoffice-cluster-render"
   check "the office suite's identity directory, which regenerates its keys when it is missing" \
     "/var/www/euro-office/Data" \
     "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "identity") | .mountPath' $SUITE_D)"
+  check "the board's semantic backgroundImages key renders a DNS-label volume name" \
+    "/app/public/background-images" \
+    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "background-images") | .mountPath' $BOARD_D)"
+  check "the board's semantic userAvatars key renders a DNS-label volume name" \
+    "/example/state/board-avatars" \
+    "$(y '.spec.template.spec.volumes[] | select(.name == "user-avatars") | .hostPath.path' $BOARD_D)"
+  check "the project manager's semantic publicUserfiles key renders a DNS-label volume name" \
+    "/var/www/html/public/userfiles" \
+    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "public-userfiles") | .mountPath' $PROJECTS_D)"
 
   echo
   echo "== THE EDITOR THAT OWNS NO DOCUMENT MOUNTS NOTHING, AND EVERY OTHER WORKLOAD IS A SINGLE WRITER =="

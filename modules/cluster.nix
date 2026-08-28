@@ -92,6 +92,7 @@
 # category named after one of its tenants stops being able to hold the second one honestly.
 #
 # ONE NAMESPACE. Everything declared here lives under `nixoffice`, like every repo in this family.
+{ mkConsumerModule }:
 { config, lib, ... }:
 let
   cfg = config.nixoffice.cluster;
@@ -99,6 +100,19 @@ let
 
   catalogue = import ../lib/applications.nix { };
   engineKinds = catalogue.engines;
+
+  # The common factory uses `selfUrlEnv` as the catalogue-side marker for whether a public URL is
+  # required. Nixoffice has the richer source fact below (`publicUrl.envs`, including host/origin
+  # forms and suffixes); the extension replaces the factory's one-variable projection with that
+  # exact fan-out. This marker therefore centralises only the two presence guards.
+  catalogueFor = group: lib.mapAttrs
+    (_: entry: entry // {
+      selfUrlEnv =
+        if entry.publicUrl == null
+        then null
+        else lib.head (lib.attrNames entry.publicUrl.envs);
+    })
+    catalogue.${group};
 
   # The catalogue's groups, hand-listed to match the option surface below. The fragility that
   # invites -- a group added to the catalogue and never wired into an option -- is closed by a check
@@ -168,7 +182,7 @@ let
     else if !(connectionsOf x ? ${role}) then null
     else need.engines.${(connectionsOf x).${role}.engine} or null;
 
-  engineOf = x: role: (connectionsOf x).${role}.engine or null;
+  engineOf = x: role: (x.w.connections.${role}.engine or null);
   styleOf = x: role: let w = wiringOf x role; in if w == null then null else w.style;
 
   isEmbeddedEngine = e: e != null && (engineKinds.${e}.embedded or false);
@@ -236,25 +250,20 @@ let
   # Three populations, and the third is why this is not a single list. A directory that exists ONLY
   # to hold an embedded engine's file is demanded when that engine is chosen and refused when it is
   # not -- a backing for a database nothing will ever write reads as though the data were in it.
-  requiredState = x:
+  requiredStateKeys = x:
     lib.attrNames (lib.filterAttrs
       (_: s: s.required || (s.embeddedFor != null && isEmbeddedEngine (engineOf x s.embeddedFor)))
       x.entry.state);
 
-  forbiddenState = x:
+  allowedStateKeys = x:
     lib.attrNames (lib.filterAttrs
-      (_: s: !s.required && s.embeddedFor != null && !(isEmbeddedEngine (engineOf x s.embeddedFor)))
+      (_: s: s.required || s.embeddedFor == null || isEmbeddedEngine (engineOf x s.embeddedFor))
       x.entry.state);
 
-  knownState = x: lib.filterAttrs (k: _: x.entry.state ? ${k}) x.w.state;
-
-  stateOf = x:
-    lib.mapAttrs
-      (key: backing: {
-        inherit (x.entry.state.${key}) mountPath readOnly;
-        inherit (backing) claim hostPath hostPathType;
-      })
-      (knownState x);
+  # Public state keys are semantic catalogue names and remain source-compatible even where an
+  # established camelCase key is not a Kubernetes DNS label. Only the rendered volume identity is
+  # resolved; every mount and central guard follows the same factory callback.
+  volumeNameOf = { entry, ... }: key: entry.state.${key}.volumeName or key;
 
   ## ---------------------------------------------------------------------
   ## The address a browser uses, in whatever form each variable wants
@@ -322,8 +331,6 @@ let
 
   imageOf = x: if x.w.image != null then x.w.image else "${x.entry.image}:${x.w.version}";
 
-  portsOf = x: lib.mapAttrs (_: number: { inherit number; }) x.entry.ports;
-
   secretsOf = x:
     lib.mapAttrs
       (role: d: {
@@ -345,55 +352,24 @@ let
     // backgroundEnv x
     // x.w.env;
 
-  probesOf = x:
-    lib.optionalAttrs (x.entry.readiness != null)
-      {
-        readiness = { port = x.entry.primaryPort; } // x.entry.readiness;
-      }
-    // lib.optionalAttrs (x.entry.startup != null) {
-      startup = { port = x.entry.primaryPort; } // x.entry.startup;
-    };
-
-  # Handed to the band model only when the consumer says it is part of the render: `origin` and
-  # `slot` are ITS terms, and defining them into a render that does not declare them is an eval
-  # error rather than a graceful no-op.
-  addressingOf = x:
-    lib.optionalAttrs (platform.origin != null) {
-      origin = platform.origin;
-      inherit (x.w) slot;
-    };
-
-  mkGrammarApp = x:
-    {
-      namespace = namespaceOf x;
-      inherit (x.w) createNamespace project exposure scaling;
-      image = imageOf x;
-      ports = portsOf x;
-      state = stateOf x;
-      secrets = secretsOf x;
-      env = envOf x;
-      args = x.entry.args ++ x.w.args;
-      probes = probesOf x;
-    }
-    // addressingOf x;
+  # The shared projection stays factory-owned, including the legacy-subtype state renderer. The
+  # extension replaces only the domain halves the common factory cannot know: the role-shaped
+  # credential/connection secrets and the richer environment fan-out. `image` is repeated because
+  # its public option is a disabled-common replacement used to suppress the generic override
+  # warning; rendering a disabled replacement is this adapter's responsibility.
+  extendApp = x: x.app // {
+    image = imageOf x;
+    secrets = secretsOf x;
+    env = envOf x;
+  };
 
   ## ---------------------------------------------------------------------
   ## Derived facts the guards are written against
   ## ---------------------------------------------------------------------
 
   listNames = names: lib.concatMapStringsSep ", " (n: "`${n}`") names;
-  showSlot = x: if x.w.slot == null then "(none)" else toString x.w.slot;
 
   slotClaims = lib.filter (x: x.w.slot != null) allWorkloads;
-  claimantsOf = slot: map (x: x.name) (lib.filter (x: x.w.slot == slot) slotClaims);
-  duplicatedSlots =
-    lib.filter (slot: lib.length (claimantsOf slot) > 1)
-      (lib.unique (map (x: x.w.slot) slotClaims));
-
-  creatorsOf = ns:
-    map (x: x.name) (lib.filter (x: x.w.createNamespace && namespaceOf x == ns) allWorkloads);
-  createdNamespaces =
-    lib.unique (map namespaceOf (lib.filter (x: x.w.createNamespace) allWorkloads));
 
   # Every application this catalogue knows, by name. A namespace may not be called after one of
   # them -- see the assertions.
@@ -560,58 +536,6 @@ let
         (lib.attrNames (lib.filterAttrs (r: _: need ? ${r}) declared)))
     allWorkloads;
 
-  storageAssertions = lib.concatMap
-    (x:
-      let
-        declared = lib.attrNames x.w.state;
-        unknown = lib.filter (k: !(x.entry.state ? ${k})) declared;
-        missing = lib.filter (k: !(x.w.state ? ${k})) (requiredState x);
-        forbidden = lib.filter (k: x.w.state ? ${k}) (forbiddenState x);
-      in
-      [
-        {
-          assertion = unknown == [ ];
-          message =
-            "nixoffice: `${x.name}` backs " + listNames unknown + " under `state`, and this software "
-            + "writes "
-            + (if x.entry.state == { } then "nothing at all"
-            else
-              lib.concatStringsSep ", "
-                (lib.mapAttrsToList (k: s: "`${k}` at ${s.mountPath}") x.entry.state))
-            + ". A key that is not the catalogue's mounts a volume nothing reads.";
-        }
-        {
-          assertion = missing == [ ];
-          message =
-            "nixoffice: `${x.name}` must back " + listNames (requiredState x) + " and backs "
-            + (if declared == [ ] then "none of it" else listNames declared)
-            + ". An unbacked directory is not an error at runtime -- the workload starts, uses the "
-            + "container's own filesystem, reports itself healthy, and loses it at the next restart"
-            + lib.optionalString (x.entry.corpus != [ ])
-              (", and " + listNames x.entry.corpus + " "
-              + (if lib.length x.entry.corpus == 1 then "holds" else "hold") + " the work itself")
-            + ".";
-        }
-        {
-          assertion = forbidden == [ ];
-          message =
-            "nixoffice: `${x.name}` backs " + listNames forbidden + ", which exists only to hold an "
-            + "EMBEDDED engine -- and this declaration points the connection that would use it at a "
-            + "real one. Nothing will ever write in there, and a backing for a database file that "
-            + "does not exist reads, to everybody who comes after, as though the data were in it.";
-        }
-        {
-          assertion = lib.all
-            (backing: (backing.claim == null) != (backing.hostPath == null))
-            (lib.attrValues x.w.state);
-          message =
-            "nixoffice: `${x.name}` backs a directory with neither or both of `claim` and "
-            + "`hostPath`. Storage needs exactly one backing: an existing claim by name, or a path "
-            + "on the node.";
-        }
-      ])
-    allWorkloads;
-
   credentialAssertions = lib.concatMap
     (x:
       let
@@ -724,26 +648,11 @@ let
     })
     allWorkloads;
 
-  publicUrlAssertions = lib.concatMap
-    (x: [
-      {
-        assertion = x.entry.publicUrl == null || x.w.publicUrl != null;
-        message =
-          "nixoffice: `${x.name}` must be told the URL a browser reaches it at, and `publicUrl` is "
-          + "unset. There is no default anybody could know -- it is a fleet fact -- and the failure "
-          + "without it is links that point somewhere else and sign-ins that end nowhere while "
-          + "every credential is correct. Give the ORIGIN only; which variables it goes into, and "
-          + "whether each wants the whole origin or the bare host, is knowledge and this module "
-          + "applies it.";
-      }
-      {
-        assertion = x.entry.publicUrl != null || x.w.publicUrl == null;
-        message =
-          "nixoffice: `${x.name}` sets `publicUrl`, and this software reads no such variable -- so "
-          + "the value would reach no object at all. Whatever fronts it knows its own address; this "
-          + "workload does not need to.";
-      }
-      {
+  # The factory owns whether the selected software needs or accepts a public URL. This surface's
+  # extra rule is narrower: the one value fans out into several catalogue-shaped variables, so it
+  # must be an origin rather than an arbitrary URL.
+  publicUrlAssertions = map
+    (x: {
         assertion = x.w.publicUrl == null || isOrigin x.w.publicUrl;
         message =
           "nixoffice: `${x.name}` gives `publicUrl = \"${toString x.w.publicUrl}\"`, which is not a "
@@ -751,8 +660,7 @@ let
           + "slash, no path. One of the applications in this catalogue wants that value with the "
           + "scheme stripped off and another wants a path appended to it, and both of those are "
           + "derived here from one origin.";
-      }
-    ])
+      })
     allWorkloads;
 
   coeditorAssertions = lib.concatMap
@@ -821,27 +729,6 @@ let
       })
       allWorkloads;
 
-  tierAssertions =
-    map
-      (slot: {
-        assertion = false;
-        message =
-          "nixoffice: slot ${toString slot} is claimed by more than one workload: "
-          + listNames (claimantsOf slot) + ". A slot is one identity in every address space the "
-          + "fleet maps it into, so two claimants is a collision in all of them at once.";
-      })
-      duplicatedSlots
-    ++ map
-      (ns: {
-        assertion = lib.length (creatorsOf ns) == 1;
-        message =
-          "nixoffice: namespace `${ns}` is created by more than one workload: "
-          + listNames (creatorsOf ns) + ". Two Applications owning one Namespace fight over it. Let "
-          + "exactly one anchor it, or anchor it in the tenancy layer and set "
-          + "`createNamespace = false` on all of them.";
-      })
-      createdNamespaces;
-
   ## ---------------------------------------------------------------------
   ## Warnings
   ## ---------------------------------------------------------------------
@@ -880,16 +767,6 @@ let
           "nixoffice: `${x.name}` asks nobody for anything and is declared `${x.w.exposure}`, so "
           + "whatever grants membership of that class IS the entire access control on it. That can "
           + "be a perfectly deliberate arrangement; it is worth knowing that it is the arrangement.";
-      })
-      allWorkloads
-    ++ map
-      (x: {
-        when = x.w.slot != null && platform.origin == null;
-        message =
-          "nixoffice: `${x.name}` claims slot ${showSlot x}, and `nixoffice.cluster.platform.origin` "
-          + "is unset -- so the number is checked for collisions inside this surface, and by nothing "
-          + "for which RANGE it may come from. Set the origin when the band model is part of the "
-          + "same render.";
       })
       allWorkloads;
 
@@ -1297,12 +1174,13 @@ let
     };
   };
 
-  mkKind = { options ? sharedOptions, extra, description, example }: lib.mkOption {
-    default = { };
+  # The factory owns each root option and selector enum. Keep the former examples and selector
+  # declarations beside their roots so the documentation-only delta stays reviewable, but pass
+  # neither as `extraOptions`: the selector path is deliberately collision-protected by the API.
+  mkKind = { options ? sharedOptions, extra, description, example }: {
+    selector = lib.head (lib.attrNames extra);
+    extraOptions = options;
     inherit description example;
-    type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-      options = options // extra;
-    }));
   };
 
   available = group: lib.concatStringsSep ", " (lib.attrNames catalogue.${group});
@@ -1311,10 +1189,8 @@ let
     type = lib.types.enum (lib.attrNames catalogue.${group});
     description = "Which ${what}, from the catalogue. Available: ${available group}.";
   };
-in
-{
-  options.nixoffice.cluster = {
-    platform = {
+
+  platformOptions = {
       namespaces = lib.mkOption {
         description = ''
           WHICH NAMESPACE each category's workloads land in. One option per category the catalogue
@@ -1390,8 +1266,9 @@ in
           about correctness, so it is a number somebody can move rather than a rule.
         '';
       };
-    };
+  };
 
+  rootDefinitions = {
     wikis = mkKind {
       description = ''
         Wikis, keyed by a name of your choosing. Pages somebody AUTHORED, linked to each other, in
@@ -1628,6 +1505,9 @@ in
       extra.record = selector "records" "record platform";
     };
 
+  };
+
+  reportOptions = {
     # ── Computed, read-only ─────────────────────────────────────────────────────────────────────
 
     categories = lib.mkOption {
@@ -1822,39 +1702,69 @@ in
       '';
     };
 
-    renderedByGrammar = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      readOnly = true;
-      default = lib.sort (a: b: a < b) (map (x: x.name) allWorkloads);
-      defaultText = lib.literalExpression "every declared workload";
-      description = ''
-        Workloads rendered through the app grammar. EVERY declared workload appears here and there
-        is no second list, because nothing in this repository is delivered as a chart, a custom
-        resource or a schedule -- the untyped surface is empty, and the option that would create one
-        does not exist.
-
-        That is also what makes the engine rule structural: with no route to a second object, an
-        application cannot be given a database beside it even by somebody trying.
-      '';
-    };
   };
 
-  config = {
-    # THE WHOLE CLUSTER-FACING RENDER, and there is nothing else: every object this surface produces
-    # is described as an app, in somebody else's vocabulary.
-    nixk3s.apps = lib.listToAttrs (map (x: lib.nameValuePair x.name (mkGrammarApp x)) allWorkloads);
+  # Keep only the terms this public surface has always exposed. `image` and role-shaped
+  # `credentials` are deliberate disabled-common replacements in `extraOptions`; `state` remains
+  # enabled, and its exact legacy subtype refines the common contract now that the factory treats
+  # absent extended backing fields as their closed defaults.
+  enabledOptions = [
+    "version"
+    "createNamespace"
+    "project"
+    "slot"
+    "exposure"
+    "scaling"
+    "state"
+    "publicUrl"
+    "env"
+    "args"
+  ];
 
-    nixidy.assertions =
+  factoryRoots = lib.mapAttrs
+    (group: definition: {
+      catalogue = catalogueFor group;
+      selector = definition.selector;
+      inherit enabledOptions;
+      extraOptions = definition.extraOptions;
+      inherit namespaceOf volumeNameOf requiredStateKeys allowedStateKeys;
+      extend = extendApp;
+      description = definition.description;
+    })
+    rootDefinitions;
+
+  factoryModule = mkConsumerModule {
+    namespace = "nixoffice";
+    optionPath = [ "nixoffice" "cluster" ];
+    platformOption = "platform";
+    roots = factoryRoots;
+
+    # `project` and `origin` are factory-owned names. The other three platform terms keep their
+    # exact existing option declarations; the resolved project default is restored below at the
+    # same priority as the former mkOption default.
+    extraPlatformOptions = builtins.removeAttrs platformOptions [ "project" "origin" ];
+    extraNamespaceOptions = reportOptions;
+
+    # Storage shape/requiredness, namespace anchors, slot collisions, declaration/rendered-name
+    # collisions, and URL presence are now central. Everything here is office-domain knowledge.
+    extraAssertions = _workloads:
       connectionAssertions
-      ++ storageAssertions
       ++ credentialAssertions
       ++ scalingAssertions
       ++ authAssertions
       ++ publicUrlAssertions
       ++ coeditorAssertions
-      ++ categoryAssertions
-      ++ tierAssertions;
+      ++ categoryAssertions;
 
-    nixidy.warnings = warnings;
+    # The factory owns the one slot-without-origin warning. These retain the calibrated background,
+    # cold-start, and unauthenticated-exposure diagnostics.
+    extraWarnings = _workloads: warnings;
+
+    extraConfig = _workloads: {
+      nixoffice.cluster.platform.project = lib.mkOptionDefault "default";
+    };
   };
+in
+{
+  imports = [ factoryModule ];
 }

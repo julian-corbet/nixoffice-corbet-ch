@@ -630,6 +630,7 @@ rec {
           embeddedFor = null;
         };
         publicUserfiles = {
+          volumeName = "public-userfiles";
           mountPath = "/var/www/html/public/userfiles";
           readOnly = false;
           required = true;
@@ -894,12 +895,14 @@ rec {
           embeddedFor = null;
         };
         backgroundImages = {
+          volumeName = "background-images";
           mountPath = "/app/public/background-images";
           readOnly = false;
           required = true;
           embeddedFor = null;
         };
         userAvatars = {
+          volumeName = "user-avatars";
           mountPath = "/app/public/user-avatars";
           readOnly = false;
           required = true;
