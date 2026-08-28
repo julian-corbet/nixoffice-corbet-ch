@@ -1,11 +1,9 @@
 {
   description = "nixoffice — where the written work happens, declared: the office applications a fleet runs, and the documents half of a workstation";
 
-  # NO INPUTS FOR CONSUMERS, the same convention the rest of this family uses. The modules take
-  # `pkgs`/`config`/`lib` from whatever evaluation composes them and never reach for these inputs, so
-  # a consumer's closure gains nothing from them — but `checks` needs a real package set to build a
-  # derivation in, and a real renderer and a real app grammar to render the cluster module through,
-  # and a flake cannot conjure any of them.
+  # The host modules take `pkgs`/`config`/`lib` from whichever evaluation composes them. The cluster
+  # export additionally closes over nixk3s' consumer factory, while still taking the composing
+  # evaluation's module arguments. Checks need the real renderer and grammar as before.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -17,11 +15,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # THE APP GRAMMAR THIS REPOSITORY CONSUMES. Also checks-only, and that is the point being proven
-    # rather than a shortcut: a consumer imports the grammar itself, and this input exists so `nix
-    # flake check` can render the cluster module through the REAL grammar and assert the manifests
-    # that come out — rather than asserting that a module which merely mentions `nixk3s.apps`
-    # evaluates.
+    # THE APP GRAMMAR AND CONSUMER FACTORY THIS REPOSITORY CONSUMES. Checks render through the real
+    # grammar, and the exported cluster module is constructed by the matching factory.
     nixk3s = {
       url = "github:julian-corbet/nixk3s-corbet-ch";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -39,8 +34,10 @@
       # The cluster plane: the office applications a fleet runs. Composed into a nixidy environment
       # ALONGSIDE the app grammar, which declares the options this module defines into — see
       # modules/cluster.nix's own header.
-      nixidyModules.nixoffice = ./modules/cluster.nix;
-      nixidyModules.default = ./modules/cluster.nix;
+      nixidyModules.nixoffice = import ./modules/cluster.nix {
+        mkConsumerModule = nixk3s.lib.mkConsumerModule;
+      };
+      nixidyModules.default = self.nixidyModules.nixoffice;
 
       # The host plane: the documents half of a workstation.
       nixosModules.nixoffice = ./modules/nixoffice.nix;
@@ -53,7 +50,7 @@
       lib.catalogue = import ./lib/tools.nix { };
       lib.applications = import ./lib/applications.nix { };
       lib.resolve = import ./lib/resolve.nix { inherit (nixpkgs) lib; };
-      lib.cluster = ./modules/cluster.nix;
+      lib.cluster = self.nixidyModules.nixoffice;
 
       # `nix flake check` evaluates none of the module outputs on its own, so a green check on this
       # repository without these three files would cover nothing but flake syntax.

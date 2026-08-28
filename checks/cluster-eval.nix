@@ -23,12 +23,11 @@
 # One more is a refused VALUE rather than a missing option, and it is in `mustFail` with the guards:
 # a collaborative editor declared `scale-to-zero`, which that group's enum does not have.
 #
-# Four refusals additionally have their MESSAGE asserted by content, because `tryEval` can only say
-# THAT something was refused: the missing-engine refusal (it has to explain that the software will
-# silently use one inside its own container), the watcher refusal (it has to explain a failure with
-# no HTTP request anywhere in it), the unsupported-engine refusal (it has to name both what was
-# asked for and what the software speaks) and the namespace-naming refusal (it has to name the
-# category, since that is the thing that outlives the application).
+# Four domain refusals additionally have their MESSAGE asserted by content, because `tryEval` can
+# only say THAT something was refused: missing/unsupported engines, the watcher, and category
+# naming. Slot and namespace-anchor fixtures separately require exactly one matching shared
+# diagnostic, proving the factory is their sole authority rather than a second voice beside this
+# module's old guards.
 { pkgs, lib, nixidy, appsModule, addressingModule, clusterModule }:
 let
   good = import ../examples/all/values.nix;
@@ -269,6 +268,19 @@ let
     workload-given-a-replica-count =
       lib.recursiveUpdate good { nixoffice.cluster.wikis.pages.replicas = 2; };
 
+    # The factory's richer common backing is an implementation vocabulary here. This consumer's
+    # public state contract remains exactly claim-or-hostPath; retaining the shared state renderer
+    # must not accidentally publish its other backing kinds or adoption controls.
+    state-given-a-common-configmap-backing =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.wikis.pages.state.config.configMap = "example-pages";
+      };
+
+    state-given-a-common-volume-rename =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.wikis.pages.state.config.volumeName = "pages-config";
+      };
+
     # Only the collaborative editors are told which hosts may hand them a document.
     document-hosts-on-a-workload-that-owns-its-own-documents =
       lib.recursiveUpdate good { nixoffice.cluster.wikis.pages.documentHosts = [ "https://files.example.com" ]; };
@@ -291,6 +303,12 @@ let
   watcherMessage = firstMatching mustFail.watcher-workload-scaled-to-zero "`pipeline`";
   unsupportedMessage = firstMatching mustFail.engine-the-software-does-not-speak "does not speak";
   namingMessage = firstMatching mustFail.namespace-named-after-a-workload-declared-in-it "`pipeline`";
+  slotMessages = lib.filter
+    (m: lib.hasInfix "slot 1 is claimed by 2 workloads" m)
+    (failures mustFail.two-workloads-on-one-slot);
+  anchorMessages = lib.filter
+    (m: lib.hasInfix "namespace `example-filing` is anchored by 2 workloads" m)
+    (failures mustFail.two-workloads-creating-one-namespace);
 
   ## ---------------------------------------------------------------------
   ## The catalogue's own shape, so a future edit cannot silently break the above
@@ -336,7 +354,10 @@ let
       && emptyCfg.nixoffice.cluster.splitCorpora == { }
       && emptyCfg.nixoffice.cluster.unauthenticated == [ ]
       && emptyCfg.nixoffice.cluster.slots == { }
-      && emptyCfg.nixoffice.cluster.renderedByGrammar == [ ];
+      && emptyCfg.nixoffice.cluster.clusterSlots == { }
+      && emptyCfg.nixoffice.cluster.renderedByGrammar == [ ]
+      && emptyCfg.nixoffice.cluster.renderedDirectly == [ ]
+      && emptyCfg.nixoffice.cluster.notRendered == [ ];
 
     "an empty surface raises no assertion of its own -- an unused module must be silent" =
       lib.all (a: a.assertion) emptyCfg.nixidy.assertions;
@@ -346,7 +367,9 @@ let
 
     "every declared workload goes through the grammar -- there is no second, untyped route" =
       goodCfg.nixoffice.cluster.renderedByGrammar == sorted (lib.attrNames goodCfg.nixk3s.apps)
-      && lib.length goodCfg.nixoffice.cluster.renderedByGrammar == 12;
+      && lib.length goodCfg.nixoffice.cluster.renderedByGrammar == 12
+      && goodCfg.nixoffice.cluster.renderedDirectly == [ ]
+      && goodCfg.nixoffice.cluster.notRendered == [ ];
 
     # ── THE CATALOGUE'S OWN INTEGRITY ─────────────────────────────────────────────────────────
     "the module's groups are exactly the catalogue's tables, with nothing left unwired" =
@@ -517,7 +540,8 @@ let
       && goodCfg.nixk3s.apps.projects.slot == 11;
 
     "and the slot report is what a private layer reads to build an address" =
-      lib.length (lib.attrNames goodCfg.nixoffice.cluster.slots) == 12;
+      lib.length (lib.attrNames goodCfg.nixoffice.cluster.slots) == 12
+      && goodCfg.nixoffice.cluster.clusterSlots == goodCfg.nixoffice.cluster.slots;
 
     # ── The failing direction ─────────────────────────────────────────────────────────────────
     "every guard fires: nothing in the must-fail set renders" =
@@ -540,6 +564,10 @@ let
     "the naming refusal names the CATEGORY, since that is the thing that outlives the application" =
       lib.hasInfix "`dms` category" namingMessage
       && lib.hasInfix "two applications each" namingMessage;
+
+    "slot collisions have one central factory diagnostic" = lib.length slotMessages == 1;
+
+    "namespace anchors have one central factory diagnostic" = lib.length anchorMessages == 1;
   };
 
   failed = lib.attrNames (lib.filterAttrs (_: passed: !passed) results);
