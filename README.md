@@ -268,13 +268,17 @@ engine address is built from a Service name, a namespace and the cluster domain;
 connection string are `secretKeyRef` and never values; an embedded engine is a path inside a mounted
 directory with no host variable at all; the document-host patterns come out numbered and escaped;
 the switchable timers are rendered off in the same manifests whose workloads are labelled
-`scale-to-zero`; state forces `Recreate` on every workload that keeps anything; each namespace is
-anchored exactly once and carries the annotation that stops it being cascade-deleted; and no Service
-carries a pinned address, an external IP or a node port.
+`scale-to-zero`; state forces `Recreate` on every workload that keeps anything; Cal.com and
+Collabora remain `Recreate` despite empty state because their schema migration and document session
+are single-writer work; each namespace is anchored exactly once and carries the annotation that
+stops it being cascade-deleted; and no Service carries a pinned address, an external IP or a node
+port.
 
 Every guard has been **mutation-tested**: breaking the missing-engine assertion makes `cluster-eval`
 fail on both the refusal and its message, and adding a `replicas` option back makes it fail on the
-structural claim.
+structural claim. The stateless single-writer checks are adversarial in the same way: each first
+proves that no volume can be forcing the strategy and then requires `Recreate`; a volume-backed
+workload is the negative control, remaining unmarked and reaching `Recreate` through state instead.
 
 ## Status
 

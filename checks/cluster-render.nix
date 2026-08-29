@@ -162,13 +162,20 @@ pkgs.runCommand "nixoffice-cluster-render"
     "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "public-userfiles") | .mountPath' $PROJECTS_D)"
 
   echo
-  echo "== THE EDITOR THAT OWNS NO DOCUMENT MOUNTS NOTHING, AND EVERY OTHER WORKLOAD IS A SINGLE WRITER =="
-  check "no volumes at all"       "0" "$(y '[.spec.template.spec.volumes // [] | .[]] | length' $EDIT_D)"
-  check "no volume mounts at all" "0" "$(y '[.spec.template.spec.containers[0].volumeMounts // [] | .[]] | length' $EDIT_D)"
-  check "nothing to lose, so a rolling update is safe" "RollingUpdate" "$(y '.spec.strategy.type' $EDIT_D)"
-  check "the booking page keeps nothing on disk either" "RollingUpdate" "$(y '.spec.strategy.type' $BOOK_D)"
-  for d in "$PAGES_D" "$PIPE_D" "$SHELF_D" "$TASKS_D" "$BOARD_D" "$SUITE_D" "$TYPE_D" "$CONTACTS_D" "$PROFILE_D"; do
-    check "$(basename $d): single writer, so Recreate and never a rolling update" "Recreate" \
+  echo "== EMPTY STATE DOES NOT ERASE A NON-FILESYSTEM SINGLE-WRITER CONSTRAINT =="
+  check "the editor has no volumes at all"       "0" "$(y '[.spec.template.spec.volumes // [] | .[]] | length' $EDIT_D)"
+  check "the editor has no volume mounts at all" "0" "$(y '[.spec.template.spec.containers[0].volumeMounts // [] | .[]] | length' $EDIT_D)"
+  check "and still stops the old document-session process before starting the new one" \
+    "Recreate" "$(y '.spec.strategy.type' $EDIT_D)"
+  check "the booking page has no volumes either" "0" \
+    "$(y '[.spec.template.spec.volumes // [] | .[]] | length' $BOOK_D)"
+  check "and still serializes the image entrypoint's schema migration" \
+    "Recreate" "$(y '.spec.strategy.type' $BOOK_D)"
+
+  echo
+  echo "== DURABLE STATE INDEPENDENTLY FORCES RECREATE =="
+  for d in "$PAGES_D" "$PIPE_D" "$SHELF_D" "$TASKS_D" "$BOARD_D" "$PROJECTS_D" "$SUITE_D" "$TYPE_D" "$CONTACTS_D" "$PROFILE_D"; do
+    check "$(basename $d): stateful, so Recreate and never a rolling update" "Recreate" \
       "$(y '.spec.strategy.type' $d)"
   done
   check "and every workload keeps exactly one replica" "1" "$(y '.spec.replicas' $PAGES_D)"

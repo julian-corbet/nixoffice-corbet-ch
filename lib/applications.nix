@@ -1003,6 +1003,12 @@ rec {
       ports.http = 3000;
       primaryPort = "http";
 
+      # The image runs schema migrations before starting the server. Two copies during a rolling
+      # update can therefore race the same production schema even though this workload keeps no
+      # directory of its own. Name the single-writer property directly; empty `state` must not turn
+      # it into a rolling update.
+      singleWriter = true;
+
       state = { };
       corpus = [ ];
       corpusInEngine = "database";
@@ -1128,6 +1134,11 @@ rec {
       image = "collabora/code";
       ports.http = 9980;
       primaryPort = "http";
+
+      # The unit of work is a live document session held by one COOLWSD process. A rolling update
+      # would send requests for that session to a fresh process that has never seen the document.
+      # There is no durable directory from which the grammar could infer this, so say it directly.
+      singleWriter = true;
 
       state = { };
       corpus = [ ];

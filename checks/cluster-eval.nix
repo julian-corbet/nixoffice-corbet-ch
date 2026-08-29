@@ -447,6 +447,13 @@ let
     "the collaborative editors own no corpus at all -- that is what defines the group" =
       lib.all (e: e.corpus == [ ] && e.corpusInEngine == null) (lib.attrValues catalogue.coeditors);
 
+    "the stateless single writers say so directly, without making every workload one" =
+      goodCfg.nixk3s.apps.booking.state == { }
+      && goodCfg.nixk3s.apps.editing.state == { }
+      && goodCfg.nixk3s.apps.booking.singleWriter
+      && goodCfg.nixk3s.apps.editing.singleWriter
+      && !goodCfg.nixk3s.apps.pages.singleWriter;
+
     # ── CATEGORIES, RESOLVED ──────────────────────────────────────────────────────────────────
     "a workload's namespace is its CATEGORY's, and nothing declared it" =
       goodCfg.nixk3s.apps.pages.namespace == "example-wiki"
