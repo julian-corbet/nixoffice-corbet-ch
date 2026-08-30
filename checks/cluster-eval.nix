@@ -662,7 +662,9 @@ let
       && goodCfg.nixk3s.apps.profile.security.capabilitiesDrop == [ "ALL" ]
       && !goodCfg.nixk3s.apps.profile.security.allowPrivilegeEscalation
       && goodCfg.nixk3s.apps.profile.security.seccomp == "RuntimeDefault"
-      && goodCfg.nixk3s.apps.pages.security == { };
+      && goodCfg.nixk3s.apps.pages.security.capabilitiesDrop == [ ]
+      && goodCfg.nixk3s.apps.pages.security.allowPrivilegeEscalation == null
+      && goodCfg.nixk3s.apps.pages.security.seccomp == null;
 
     "optional named Paperless credentials render only when the declaration supplies them" =
       goodCfg.nixk3s.apps.pipeline.secrets.emailPassword.env.PAPERLESS_EMAIL_HOST_PASSWORD
