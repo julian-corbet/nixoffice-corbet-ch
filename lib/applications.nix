@@ -1151,9 +1151,10 @@ rec {
 
       readiness = {
         path = "/";
-        initialDelaySeconds = 0;
+        # The live COOLWSD deployment establishes this endpoint with one-second requests. Its cold
+        # dictionary load is represented by the two-minute failure budget, not by making each
+        # individual probe wait longer or by guessing a separate initial delay.
         periodSeconds = 10;
-        timeoutSeconds = 3;
         failureThreshold = 12;
       };
       startup = null;

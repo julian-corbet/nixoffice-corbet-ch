@@ -594,6 +594,15 @@ let
       && goodCfg.nixk3s.apps.board.probes.readiness.path == null
       && goodCfg.nixk3s.apps.profile.probes.readiness.port == "admin";
 
+    "the collaborative editor keeps the measured two-minute cold-start budget" =
+      goodCfg.nixk3s.apps.editing.probes.readiness.path == "/"
+      && goodCfg.nixk3s.apps.editing.probes.readiness.initialDelaySeconds == null
+      && goodCfg.nixk3s.apps.editing.probes.readiness.periodSeconds == 10
+      # The catalogue does not widen the request timeout; cluster-render proves the manifest gets
+      # the grammar's one-second default.
+      && goodCfg.nixk3s.apps.editing.probes.readiness.timeoutSeconds == null
+      && goodCfg.nixk3s.apps.editing.probes.readiness.failureThreshold == 12;
+
     "the two halves of a corpus are published, and the one workload holding both in one place is not" =
       lib.hasInfix "does not run" goodCfg.nixoffice.cluster.splitCorpora.pages
       && lib.hasInfix "embedded" goodCfg.nixoffice.cluster.splitCorpora.tasks

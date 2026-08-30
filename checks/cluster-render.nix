@@ -242,6 +242,14 @@ pkgs.runCommand "nixoffice-cluster-render"
     "$(y '.spec.template.spec.containers[0].startupProbe.failureThreshold' $PIPE_D)"
   check "and its readiness budget stays short" "6" \
     "$(y '.spec.template.spec.containers[0].readinessProbe.failureThreshold' $PIPE_D)"
+  check "the collaborative editor probes its unauthenticated root" "/" \
+    "$(y '.spec.template.spec.containers[0].readinessProbe.httpGet.path' $EDIT_D)"
+  check "the collaborative editor has no guessed initial delay" "null" \
+    "$(y '.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds' $EDIT_D)"
+  check "the collaborative editor keeps one-second probe requests" "1" \
+    "$(y '.spec.template.spec.containers[0].readinessProbe.timeoutSeconds' $EDIT_D)"
+  check "the collaborative editor keeps its two-minute cold-start budget" "12" \
+    "$(y '.spec.template.spec.containers[0].readinessProbe.failureThreshold' $EDIT_D)"
   check "no liveness probe was synthesized anywhere" "null" \
     "$(y '.spec.template.spec.containers[0].livenessProbe' $PAGES_D)"
 
