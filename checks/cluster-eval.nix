@@ -69,6 +69,24 @@ let
   };
   secretBrokerCfg = (mkEnv secretBrokerValues).config;
 
+  # An adoption may already hold an embedded database under a non-default basename. The directory
+  # and variable remain catalogue facts; this fixture proves only the historical basename varies.
+  directusSqliteValues = {
+    imports = [ good ];
+    nixoffice.cluster.records.contacts = {
+      connections.database = lib.mkForce {
+        engine = "sqlite";
+        fileName = "existing.db";
+      };
+      state = lib.mkForce {
+        database.hostPath = "/example/state/records-db";
+        uploads.hostPath = "/example/state/records-uploads";
+        extensions.hostPath = "/example/state/records-extensions";
+      };
+    };
+  };
+  directusSqliteCfg = (mkEnv directusSqliteValues).config;
+
   ## ---------------------------------------------------------------------
   ## The failing direction: guards
   ## ---------------------------------------------------------------------
@@ -140,6 +158,17 @@ let
         nixoffice.cluster.trackers.tasks.connections.database.service = "example-sql";
       };
 
+    embedded-filename-set-on-an-external-engine =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.records.contacts.connections.database.fileName = "existing.db";
+      };
+
+    embedded-filename-escaping-its-catalogue-directory =
+      {
+        imports = [ directusSqliteValues ];
+        nixoffice.cluster.records.contacts.connections.database.fileName = lib.mkForce "../existing.db";
+      };
+
     # ── Storage ────────────────────────────────────────────────────────────────────────────────
 
     required-directory-left-unbacked =
@@ -170,6 +199,31 @@ let
 
     state-with-neither-backing =
       lib.recursiveUpdate good { nixoffice.cluster.wikis.pages.state.config.hostPath = null; };
+
+    shared-state-naming-an-unknown-owner =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.trackers.board.state.logs.sharedWith = "missing";
+      };
+
+    shared-state-repeating-a-physical-backing =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.trackers.board.state.logs.hostPath = "/example/state/duplicate";
+      };
+
+    shared-state-omitting-its-subpath =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.trackers.board.state.logs.subPath = null;
+      };
+
+    shared-state-reusing-a-subpath =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.trackers.board.state.logs.subPath = "attachments";
+      };
+
+    shared-state-reusing-a-mount-order =
+      lib.recursiveUpdate good {
+        nixoffice.cluster.trackers.board.state.logs.mountOrder = 0;
+      };
 
     # ── Credentials ────────────────────────────────────────────────────────────────────────────
 
@@ -298,17 +352,11 @@ let
     workload-given-a-replica-count =
       lib.recursiveUpdate good { nixoffice.cluster.wikis.pages.replicas = 2; };
 
-    # The factory's richer common backing is an implementation vocabulary here. This consumer's
-    # public state contract remains exactly claim-or-hostPath; retaining the shared state renderer
-    # must not accidentally publish its other backing kinds or adoption controls.
+    # This consumer deliberately publishes claim/hostPath and shared-volume adoption terms, but no
+    # generated or inline backing kinds.
     state-given-a-common-configmap-backing =
       lib.recursiveUpdate good {
         nixoffice.cluster.wikis.pages.state.config.configMap = "example-pages";
-      };
-
-    state-given-a-common-volume-rename =
-      lib.recursiveUpdate good {
-        nixoffice.cluster.wikis.pages.state.config.volumeName = "pages-config";
       };
 
     # Only the collaborative editors are told which hosts may hand them a document.
@@ -516,6 +564,11 @@ let
       && goodCfg.nixk3s.apps.shelf.env.DATABASE_URL == "file:/app/app-data/db/db.sqlite"
       && !(goodCfg.nixk3s.apps.tasks.env ? VIKUNJA_DATABASE_HOST);
 
+    "an embedded engine may preserve one existing basename without moving its directory" =
+      renders directusSqliteValues
+      && directusSqliteCfg.nixk3s.apps.contacts.env.DB_FILENAME
+        == "/directus/database/existing.db";
+
     "one workload opens two connections of two different engine families" =
       goodCfg.nixoffice.cluster.engineDependencies.typesetting
       == { database = "mongodb"; cache = "redis"; };
@@ -566,18 +619,27 @@ let
       && goodCfg.nixk3s.apps.pages.state.config.hostPath == "/example/state/pages"
       && goodCfg.nixk3s.apps.editingsuite.state.identity.mountPath == "/var/www/euro-office/Data";
 
-    "semantic camelCase state keys stay public while rendered volume identities are DNS labels" =
+    "semantic state keys stay public while one physical volume preserves ordered subPath mounts" =
       goodCfg.nixoffice.cluster.trackers.board.state ? backgroundImages
       && goodCfg.nixoffice.cluster.trackers.board.state ? userAvatars
       && goodCfg.nixoffice.cluster.trackers.projects.state ? publicUserfiles
       && !(goodCfg.nixk3s.apps.board.state ? backgroundImages)
       && !(goodCfg.nixk3s.apps.board.state ? userAvatars)
       && !(goodCfg.nixk3s.apps.projects.state ? publicUserfiles)
-      && goodCfg.nixk3s.apps.board.state."background-images".mountPath
-        == "/app/public/background-images"
-      && goodCfg.nixk3s.apps.board.state."user-avatars".mountPath == "/app/public/user-avatars"
-      && goodCfg.nixk3s.apps.projects.state."public-userfiles".mountPath
-        == "/var/www/html/public/userfiles";
+      && lib.attrNames goodCfg.nixk3s.apps.board.state == [ "data" ]
+      && map (m: m.mountPath) goodCfg.nixk3s.apps.board.state.data.mounts == [
+        "/app/private/attachments"
+        "/app/public/background-images"
+        "/app/public/favicons"
+        "/app/public/user-avatars"
+        "/app/logs"
+      ]
+      && map (m: m.subPath) goodCfg.nixk3s.apps.projects.state.data.mounts == [
+        "userfiles"
+        "plugins"
+        "logs"
+        "public_userfiles"
+      ];
 
     "the editors that own no document mount nothing, and one of them keeps two directories" =
       goodCfg.nixk3s.apps.editing.state == { }
@@ -587,6 +649,20 @@ let
       goodCfg.nixk3s.apps.pipeline.probes.startup.failureThreshold == 72
       && goodCfg.nixk3s.apps.pipeline.probes.readiness.failureThreshold == 6
       && goodCfg.nixk3s.apps.pages.probes.startup == null;
+
+    "safe liveness and startup probes remain catalogue facts instead of private overlays" =
+      goodCfg.nixk3s.apps.pipeline.probes.liveness.path == "/"
+      && goodCfg.nixk3s.apps.tasks.probes.liveness.path == "/api/v1/info"
+      && goodCfg.nixk3s.apps.editingsuite.probes.liveness.path == "/healthcheck"
+      && goodCfg.nixk3s.apps.contacts.probes.liveness.path == "/server/ping"
+      && goodCfg.nixk3s.apps.profile.probes.startup.failureThreshold == 40
+      && goodCfg.nixk3s.apps.pages.probes.liveness == null;
+
+    "optional named Paperless credentials render only when the declaration supplies them" =
+      goodCfg.nixk3s.apps.pipeline.secrets.emailPassword.env.PAPERLESS_EMAIL_HOST_PASSWORD
+        == "password"
+      && goodCfg.nixk3s.apps.pipeline.secrets.socialProviders.env.PAPERLESS_SOCIALACCOUNT_PROVIDERS
+        == "providers";
 
     "a probe watches the port the catalogue calls primary, with the software's own path" =
       goodCfg.nixk3s.apps.tasks.probes.readiness.path == "/api/v1/info"

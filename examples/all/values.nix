@@ -124,7 +124,11 @@
         };
       };
     };
-    credentials.secretKey = { secret = "example-filing"; key = "secretKey"; };
+    credentials = {
+      secretKey = { secret = "example-filing"; key = "secretKey"; };
+      emailPassword = { secret = "example-filing-mail"; key = "password"; };
+      socialProviders = { secret = "example-filing-login"; key = "providers"; };
+    };
     # Addresses of two converter services this repository names and does not run. An address is a
     # value, so it arrives here rather than from the catalogue.
     env = {
@@ -183,9 +187,32 @@
     createNamespace = true;
     publicUrl = "https://board.example.com";
     state = {
-      attachments.hostPath = "/example/state/board-attachments";
-      backgroundImages.hostPath = "/example/state/board-backgrounds";
-      userAvatars.hostPath = "/example/state/board-avatars";
+      attachments = {
+        hostPath = "/example/state/board";
+        volumeName = "data";
+        subPath = "attachments";
+        mountOrder = 0;
+      };
+      backgroundImages = {
+        sharedWith = "attachments";
+        subPath = "background-images";
+        mountOrder = 1;
+      };
+      favicons = {
+        sharedWith = "attachments";
+        subPath = "favicons";
+        mountOrder = 2;
+      };
+      userAvatars = {
+        sharedWith = "attachments";
+        subPath = "user-avatars";
+        mountOrder = 3;
+      };
+      logs = {
+        sharedWith = "attachments";
+        subPath = "logs";
+        mountOrder = 4;
+      };
     };
     connections.database = {
       engine = "postgres";
@@ -264,8 +291,27 @@
     exposure = "nb";
     publicUrl = "https://projects.example.com";
     state = {
-      userfiles.hostPath = "/example/state/projects-userfiles";
-      publicUserfiles.hostPath = "/example/state/projects-public";
+      userfiles = {
+        hostPath = "/example/state/projects";
+        volumeName = "data";
+        subPath = "userfiles";
+        mountOrder = 0;
+      };
+      plugins = {
+        sharedWith = "userfiles";
+        subPath = "plugins";
+        mountOrder = 1;
+      };
+      logs = {
+        sharedWith = "userfiles";
+        subPath = "logs";
+        mountOrder = 2;
+      };
+      publicUserfiles = {
+        sharedWith = "userfiles";
+        subPath = "public_userfiles";
+        mountOrder = 3;
+      };
     };
     connections.database = {
       engine = "mariadb";

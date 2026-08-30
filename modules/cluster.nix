@@ -225,7 +225,8 @@ let
     else if w.style == "file" then
       typed
       // lib.optionalAttrs (w.env != null) {
-        ${w.env} = w.prefix + x.entry.state.${w.state}.mountPath + "/" + w.file;
+        ${w.env} = w.prefix + x.entry.state.${w.state}.mountPath + "/"
+          + (if conn.fileName != null then conn.fileName else w.file);
       }
     # `dsn`: an opaque or credential-bearing string arrives by Secret reference. The one safe plain
     # form is assembled from typed pieces below: no userinfo, host, path or query can enter it.
@@ -273,7 +274,10 @@ let
   # Public state keys are semantic catalogue names and remain source-compatible even where an
   # established camelCase key is not a Kubernetes DNS label. Only the rendered volume identity is
   # resolved; every mount and central guard follows the same factory callback.
-  volumeNameOf = { entry, ... }: key: entry.state.${key}.volumeName or key;
+  volumeNameOf = { entry, w, ... }: key:
+    if (w.state.${key}.volumeName or null) != null
+    then w.state.${key}.volumeName
+    else entry.state.${key}.volumeName or key;
 
   ## ---------------------------------------------------------------------
   ## The address a browser uses, in whatever form each variable wants
@@ -491,6 +495,8 @@ let
             fieldOnly = [ "service" "namespace" "port" "database" "user" "password" ];
             dsnSources = lib.optional (conn.dsn != null) "dsn"
             ++ lib.optional (conn.serviceDsn != null) "serviceDsn";
+            safeFileName = name:
+              name != "" && name != "." && name != ".." && !(lib.hasInfix "/" name);
           in
           [
             {
@@ -571,6 +577,20 @@ let
                 + "inside this workload's own directory -- and it sets " + listNames set + ". There "
                 + "is no server to reach, no user to be and no password to give. What it does need "
                 + "is the directory holding it backed, which is checked separately.";
+            }
+            {
+              assertion = conn.fileName == null || style == "file";
+              message =
+                "nixoffice: `${x.name}`'s `${role}` connection sets `fileName`, but only an "
+                + "embedded file engine has a filename inside this workload's state. An external "
+                + "engine is reached through its typed service fields or connection string.";
+            }
+            {
+              assertion = conn.fileName == null || safeFileName conn.fileName;
+              message =
+                "nixoffice: `${x.name}`'s `${role}` connection gives an unsafe embedded-engine "
+                + "filename. It must be one basename inside the catalogue's database directory: "
+                + "not empty, `.` or `..`, and with no slash.";
             }
           ])
         (lib.attrNames (lib.filterAttrs (r: _: need ? ${r}) declared)))
@@ -851,6 +871,43 @@ let
           genuinely first start.
         '';
       };
+
+      volumeName = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          The existing Kubernetes volume name, when adoption must preserve one that differs from
+          this catalogue's semantic state key. A deployment-history value, never software
+          knowledge.
+        '';
+      };
+
+      sharedWith = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Another catalogue state key whose one physical backing this directory shares. The target
+          owns the claim or host path; this key owns only its mount position within that backing.
+        '';
+      };
+
+      subPath = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Relative path within a shared physical backing. Required on every member of a shared
+          volume and checked centrally against absolute and parent-traversal paths.
+        '';
+      };
+
+      mountOrder = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.unsigned;
+        default = null;
+        description = ''
+          Position in a shared volume's rendered mount list. Explicit because list order is part of
+          an adoption's manifest even when the mount paths do not overlap.
+        '';
+      };
     };
   };
 
@@ -994,6 +1051,18 @@ let
 
           Available only where the selected engine's catalogue entry explicitly permits the
           scheme. Mutually exclusive with `dsn`, whose existing Secret-backed behavior is unchanged.
+        '';
+      };
+
+      fileName = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "existing.db";
+        description = ''
+          Existing basename for an embedded engine's file, when it differs from the catalogue's
+          safe default. The containing directory and environment variable remain software facts;
+          the filename is deployment history. Refused on external engines and if it contains a
+          slash, `.` or `..`.
         '';
       };
     };

@@ -422,7 +422,19 @@ rec {
         failureThreshold = 72;
       };
 
-      credentials.secretKey = { env = "PAPERLESS_SECRET_KEY"; required = true; };
+      liveness = {
+        path = "/";
+        initialDelaySeconds = 0;
+        periodSeconds = 30;
+        timeoutSeconds = 5;
+        failureThreshold = 6;
+      };
+
+      credentials = {
+        secretKey = { env = "PAPERLESS_SECRET_KEY"; required = true; };
+        emailPassword = { env = "PAPERLESS_EMAIL_HOST_PASSWORD"; required = false; };
+        socialProviders = { env = "PAPERLESS_SOCIALACCOUNT_PROVIDERS"; required = false; };
+      };
       authentication = "builtin";
 
       publicUrl.envs = {
@@ -827,6 +839,12 @@ rec {
         periodSeconds = 5;
         timeoutSeconds = 3;
         failureThreshold = 24;
+      };
+      liveness = {
+        path = "/api/v1/info";
+        initialDelaySeconds = 0;
+        periodSeconds = 15;
+        failureThreshold = 6;
       };
       startup = null;
 
@@ -1273,6 +1291,12 @@ rec {
         timeoutSeconds = 5;
         failureThreshold = 30;
       };
+      liveness = {
+        path = "/healthcheck";
+        initialDelaySeconds = 90;
+        periodSeconds = 30;
+        failureThreshold = 6;
+      };
       startup = null;
 
       credentials.signing = { env = "JWT_SECRET"; required = false; };
@@ -1544,6 +1568,13 @@ rec {
         timeoutSeconds = 3;
         failureThreshold = 60;
       };
+      liveness = {
+        path = "/server/ping";
+        initialDelaySeconds = 0;
+        periodSeconds = 15;
+        timeoutSeconds = 3;
+        failureThreshold = 6;
+      };
 
       credentials = {
         key = { env = "KEY"; required = true; };
@@ -1655,7 +1686,13 @@ rec {
         timeoutSeconds = 5;
         failureThreshold = 6;
       };
-      startup = null;
+      startup = {
+        path = "/";
+        initialDelaySeconds = 0;
+        periodSeconds = 3;
+        timeoutSeconds = 5;
+        failureThreshold = 40;
+      };
 
       credentials = { };
       # THE ONLY ENTRY IN THIS CATALOGUE THAT ASKS NOBODY FOR ANYTHING. See the note, and the
