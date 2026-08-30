@@ -282,8 +282,17 @@ pkgs.runCommand "nixoffice-cluster-render"
   echo
   echo "== NOTHING IS RENDERED BELOW THE APP GRAMMAR =="
   for app in $(find -L $manifests/apps -type f -name 'Application-*.yaml' | sort); do
-    check "$(basename $app): no server-side apply, because nothing here is adopted" "null" \
-      "$(y '.spec.syncPolicy.syncOptions' $app)"
+    if [ "$(basename $app)" = "Application-editing.yaml" ]; then
+      check "$(basename $app): adopted with server-side apply" "ServerSideApply=true" \
+        "$(y '.spec.syncPolicy.syncOptions[0]' $app)"
+      check "$(basename $app): adopted with server-side diff" "ServerSideDiff=true" \
+        "$(y '.metadata.annotations."argocd.argoproj.io/compare-options"' $app)"
+    else
+      check "$(basename $app): adoption does not leak" "null" \
+        "$(y '.spec.syncPolicy.syncOptions' $app)"
+      check "$(basename $app): server-side diff does not leak" "null" \
+        "$(y '.metadata.annotations."argocd.argoproj.io/compare-options"' $app)"
+    fi
     check "$(basename $app): project" "example-office" "$(y '.spec.project' $app)"
   done
   # Every file this surface produced is a Deployment, a Service, a Namespace or an Application.

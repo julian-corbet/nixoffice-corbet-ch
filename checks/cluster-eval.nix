@@ -454,6 +454,12 @@ let
       && goodCfg.nixk3s.apps.editing.singleWriter
       && !goodCfg.nixk3s.apps.pages.singleWriter;
 
+    "adoption is explicit and reaches only the workload that asked for it" =
+      goodCfg.nixk3s.apps.editing.adopt
+      && lib.all
+        (name: name == "editing" || !goodCfg.nixk3s.apps.${name}.adopt)
+        (lib.attrNames goodCfg.nixk3s.apps);
+
     # ── CATEGORIES, RESOLVED ──────────────────────────────────────────────────────────────────
     "a workload's namespace is its CATEGORY's, and nothing declared it" =
       goodCfg.nixk3s.apps.pages.namespace == "example-wiki"

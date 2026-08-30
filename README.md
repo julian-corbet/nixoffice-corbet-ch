@@ -168,6 +168,11 @@ and the module produces **numbered** variables carrying **regular expressions** 
 escaped — and refuses a port, because the value is matched against a host that carries none, so one
 with a port matches nothing and the symptom is a document that never opens.
 
+Every workload may also set `adopt = true` when its Argo Application is taking over objects that
+already exist. This is deliberately explicit and defaults to false: adoption is deployment history,
+not a property of any catalogue entry, and it enables server-side apply plus server-side diff only
+for the workload that asks for it.
+
 ## The seven groups
 
 | group | what it is | in the catalogue |

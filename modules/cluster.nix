@@ -1787,13 +1787,17 @@ let
 
   };
 
-  # Keep only the terms this public surface has always exposed. `image` and role-shaped
-  # `credentials` are deliberate disabled-common replacements in `extraOptions`; `state` remains
-  # enabled, and its exact legacy subtype refines the common contract now that the factory treats
-  # absent extended backing fields as their closed defaults.
+  # Keep only the terms this public surface owns. `adopt` is deliberately included even though it
+  # says nothing about office software: it records whether THIS deployment is taking over objects
+  # that already exist, and hiding that delivery-history fact would force a consumer back through
+  # the lower-level grammar. `image` and role-shaped `credentials` are deliberate disabled-common
+  # replacements in `extraOptions`; `state` remains enabled, and its exact legacy subtype refines
+  # the common contract now that the factory treats absent extended backing fields as their closed
+  # defaults.
   enabledOptions = [
     "version"
     "createNamespace"
+    "adopt"
     "project"
     "slot"
     "exposure"

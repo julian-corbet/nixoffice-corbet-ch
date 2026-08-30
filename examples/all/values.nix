@@ -223,6 +223,9 @@
     slot = 6;
     exposure = "public";
     createNamespace = true;
+    # This imaginary editor already existed before the owner declaration. It is the positive
+    # adoption fixture; every other workload remains fresh and is the negative control.
+    adopt = true;
     # It wants the HOST rather than the origin, and the module strips the scheme.
     publicUrl = "https://edit.example.com";
     documentHosts = [ "https://files.example.com" "https://pages.example.com" ];
