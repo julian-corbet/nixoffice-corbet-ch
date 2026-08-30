@@ -1477,6 +1477,11 @@ rec {
       ports.http = 8055;
       primaryPort = "http";
 
+      hardening = {
+        capabilities = "none";
+        privilegeEscalation = "never";
+      };
+
       state = {
         database = {
           mountPath = "/directus/database";
@@ -1650,6 +1655,12 @@ rec {
         public = 3001;
       };
       primaryPort = "admin";
+
+      hardening = {
+        capabilities = "none";
+        privilegeEscalation = "never";
+        seccomp = "RuntimeDefault";
+      };
 
       state.data = {
         mountPath = "/app/data";

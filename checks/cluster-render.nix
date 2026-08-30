@@ -267,6 +267,17 @@ pkgs.runCommand "nixoffice-cluster-render"
     "$(y '.spec.template.spec.containers[0].livenessProbe' $PAGES_D)"
 
   echo
+  echo "== ESTABLISHED HARDENING IS SOFTWARE KNOWLEDGE; IDENTITIES REMAIN ABSENT =="
+  check "Directus drops every capability" "ALL" \
+    "$(y '.spec.template.spec.containers[0].securityContext.capabilities.drop[0]' $CONTACTS_D)"
+  check "Directus cannot regain privilege" "false" \
+    "$(y '.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation' $CONTACTS_D)"
+  check "CV Manager uses the established seccomp class" "RuntimeDefault" \
+    "$(y '.spec.template.spec.securityContext.seccompProfile.type' $PROFILE_D)"
+  check "the public catalogue still invents no numeric identity" "null" \
+    "$(y '.spec.template.spec.securityContext.runAsUser' $PROFILE_D)"
+
+  echo
   echo "== TWO AUDIENCES, ONE POD, ONE SERVICE -- which is why public exposure is refused =="
   check "the editing port"     "3000" "$(y '.spec.ports[] | select(.name == "admin") | .port' $PROFILE_S)"
   check "the published port"   "3001" "$(y '.spec.ports[] | select(.name == "public") | .port' $PROFILE_S)"

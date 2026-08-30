@@ -656,6 +656,14 @@ let
       && goodCfg.nixk3s.apps.profile.probes.startup.failureThreshold == 40
       && goodCfg.nixk3s.apps.pages.probes.liveness == null;
 
+    "established restrictive container hardening remains catalogue knowledge" =
+      goodCfg.nixk3s.apps.contacts.security.capabilitiesDrop == [ "ALL" ]
+      && !goodCfg.nixk3s.apps.contacts.security.allowPrivilegeEscalation
+      && goodCfg.nixk3s.apps.profile.security.capabilitiesDrop == [ "ALL" ]
+      && !goodCfg.nixk3s.apps.profile.security.allowPrivilegeEscalation
+      && goodCfg.nixk3s.apps.profile.security.seccomp == "RuntimeDefault"
+      && goodCfg.nixk3s.apps.pages.security == { };
+
     "optional named Paperless credentials render only when the declaration supplies them" =
       goodCfg.nixk3s.apps.pipeline.secrets.emailPassword.env.PAPERLESS_EMAIL_HOST_PASSWORD
         == "password"
