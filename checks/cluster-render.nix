@@ -153,16 +153,16 @@ pkgs.runCommand "nixoffice-cluster-render"
     "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "identity") | .mountPath' $SUITE_D)"
   check "the board's semantic backgroundImages path shares the existing data volume" \
     "/app/public/background-images" \
-    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "data-01") | .mountPath' $BOARD_D)"
+    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.subPath == "background-images") | .mountPath' $BOARD_D)"
   check "the board renders one physical volume for all five semantic directories" "1" \
     "$(y '[.spec.template.spec.volumes[] | select(.name == "data")] | length' $BOARD_D)"
   check "the board preserves the live fourth subPath" "user-avatars" \
-    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "data-03") | .subPath' $BOARD_D)"
+    "$(y '.spec.template.spec.containers[0].volumeMounts[3].subPath' $BOARD_D)"
   check "the project manager's semantic publicUserfiles path shares its data volume" \
     "/var/www/html/public/userfiles" \
-    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "data-03") | .mountPath' $PROJECTS_D)"
+    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.subPath == "public_userfiles") | .mountPath' $PROJECTS_D)"
   check "and keeps the established underscore in its subPath" "public_userfiles" \
-    "$(y '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "data-03") | .subPath' $PROJECTS_D)"
+    "$(y '.spec.template.spec.containers[0].volumeMounts[3].subPath' $PROJECTS_D)"
 
   echo
   echo "== EMPTY STATE DOES NOT ERASE A NON-FILESYSTEM SINGLE-WRITER CONSTRAINT =="

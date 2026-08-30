@@ -71,12 +71,12 @@ let
 
   # An adoption may already hold an embedded database under a non-default basename. The directory
   # and variable remain catalogue facts; this fixture proves only the historical basename varies.
-  directusSqliteValues = {
+  directusSqliteValuesFor = fileName: {
     imports = [ good ];
     nixoffice.cluster.records.contacts = {
       connections.database = lib.mkForce {
         engine = "sqlite";
-        fileName = "existing.db";
+        inherit fileName;
       };
       state = lib.mkForce {
         database.hostPath = "/example/state/records-db";
@@ -85,6 +85,7 @@ let
       };
     };
   };
+  directusSqliteValues = directusSqliteValuesFor "existing.db";
   directusSqliteCfg = (mkEnv directusSqliteValues).config;
 
   ## ---------------------------------------------------------------------
@@ -164,10 +165,7 @@ let
       };
 
     embedded-filename-escaping-its-catalogue-directory =
-      {
-        imports = [ directusSqliteValues ];
-        nixoffice.cluster.records.contacts.connections.database.fileName = lib.mkForce "../existing.db";
-      };
+      directusSqliteValuesFor "../existing.db";
 
     # ── Storage ────────────────────────────────────────────────────────────────────────────────
 
