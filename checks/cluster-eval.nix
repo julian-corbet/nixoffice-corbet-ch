@@ -596,11 +596,11 @@ let
 
     "the collaborative editor keeps the measured two-minute cold-start budget" =
       goodCfg.nixk3s.apps.editing.probes.readiness.path == "/"
-      && goodCfg.nixk3s.apps.editing.probes.readiness.initialDelaySeconds == null
+      # The catalogue leaves delay and timeout unstated. The shared app option resolves that to its
+      # closed 0/1 defaults; cluster-render proves zero is omitted from YAML and one is written.
+      && goodCfg.nixk3s.apps.editing.probes.readiness.initialDelaySeconds == 0
       && goodCfg.nixk3s.apps.editing.probes.readiness.periodSeconds == 10
-      # The catalogue does not widen the request timeout; cluster-render proves the manifest gets
-      # the grammar's one-second default.
-      && goodCfg.nixk3s.apps.editing.probes.readiness.timeoutSeconds == null
+      && goodCfg.nixk3s.apps.editing.probes.readiness.timeoutSeconds == 1
       && goodCfg.nixk3s.apps.editing.probes.readiness.failureThreshold == 12;
 
     "the two halves of a corpus are published, and the one workload holding both in one place is not" =
